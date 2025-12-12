@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SVG2Sketch - Enhanced SVG to Onshape Converter</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+    <link rel="stylesheet" type="text/css" href="/static/css/index.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="top-bar">
+        <h1 class="title">SVG2Sketch Converter</h1>
+        <p class="subtitle">Enhanced SVG to Onshape Sketch with Text & Pattern Support</p>
+      </div>
+
+      <div class="content">
+        <!-- File input section -->
+        <input
+          type="file"
+          id="fileInput"
+          accept=".svg"
+          class="hidden"
+          aria-label="SVG file input"
+        />
+
+        <button id="uploadButton" class="button primary" type="button">
+          <i class="icon-upload"></i> Select SVG File
+        </button>
+
+        <div id="selectedFileInfo" class="selected-file-info hidden"></div>
+
+        <div class="upload-status-container">
+          <span id="uploadStatus"></span>
+          <span id="uploadFileName"></span>
+        </div>
+
+        <!-- Processing options -->
+        <div id="optionsPanel" class="options-panel hidden">
+          <h3>Processing Options</h3>
+          
+          <div class="option-group">
+            <label>
+              <input type="checkbox" id="textAsSketchText" checked>
+              Convert text to sketch text entities (when possible)
+            </label>
+          </div>
+          
+          <div class="option-group">
+            <label>
+              <input type="checkbox" id="textAsPaths" checked>
+              Convert text to paths (fallback for complex text)
+            </label>
+          </div>
+          
+          <div class="option-group">
+            <label>
+              <input type="checkbox" id="detectPatterns" checked>
+              Detect USE/DEFS patterns for Array optimization
+            </label>
+          </div>
+          
+          <div class="option-group">
+            <label>
+              Scale Factor:
+              <input type="number" id="scaleFactor" value="1.0" min="0.001" step="0.1">
+            </label>
+          </div>
+        </div>
+
+        <!-- Pattern detection results -->
+        <div id="patternResults" class="pattern-results hidden">
+          <h3>Detected Patterns</h3>
+          <div id="patternList"></div>
+        </div>
+
+        <!-- Plane selection -->
+        <div id="planeSelector" class="plane-selector hidden">
+          <h3>Select Target Plane</h3>
+          <select id="planeSelect">
+            <option value="">Loading planes...</option>
+          </select>
+        </div>
+
+        <!-- Convert button -->
+        <button id="convertButton" class="button primary hidden" type="button" disabled>
+          Convert to Onshape Sketch
+        </button>
+
+        <!-- Status messages -->
+        <div id="statusMessage" class="status-message"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+  </body>
+</html>
+
+
+
+
+
