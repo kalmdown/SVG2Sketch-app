@@ -28,8 +28,9 @@ router.use(fileUpload({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     abortOnLimit: true,
     responseOnLimit: 'File size limit exceeded (10MB maximum)',
-    useTempFiles: true,
-    tempFileDir: path.join(__dirname, '../tmp')
+    useTempFiles: true, // Use temp files for large files
+    tempFileDir: path.join(__dirname, '../tmp'),
+    createParentPath: true
 }));
 
 // Health check endpoint
@@ -342,8 +343,60 @@ router.post('/convert', async (req, res) => {
                 });
             }
             
-            svgContent = file.data.toString('utf8');
-            debugLog('api', `Processing uploaded SVG file: ${file.name} (${file.size} bytes)`);
+            // Read file content - handle different file upload configurations
+            // Priority: tempFilePath > Buffer > string data
+            // When useTempFiles is true, the Buffer may be empty but tempFilePath has the actual file
+            debugLog('api', 'File object structure:', {
+                hasData: !!file.data,
+                hasTempFilePath: !!file.tempFilePath,
+                size: file.size,
+                name: file.name,
+                mimetype: file.mimetype
+            });
+            
+            // Prefer tempFilePath when available (most reliable when useTempFiles is true)
+            if (file.tempFilePath) {
+                // File was saved to temp file, read it
+                const fs = await import('fs');
+                try {
+                    svgContent = fs.readFileSync(file.tempFilePath, 'utf8');
+                    debugLog('api', 'Read file from temp file path');
+                } catch (fsError) {
+                    debugLog('error', 'Failed to read temp file:', fsError);
+                    return res.status(400).json({ 
+                        error: 'Could not read file from temporary storage.' 
+                    });
+                }
+            } else if (Buffer.isBuffer(file.data) && file.data.length > 0) {
+                // File is in memory as Buffer (and has content)
+                svgContent = file.data.toString('utf8');
+                debugLog('api', 'Read file from Buffer in memory');
+            } else if (file.data && typeof file.data === 'string' && file.data.length > 0) {
+                // File data is already a string
+                svgContent = file.data;
+                debugLog('api', 'Read file from string data');
+            } else {
+                // Try to get data from mv (if using temp files) or other properties
+                debugLog('error', 'Could not determine file data location. File object:', {
+                    keys: Object.keys(file),
+                    hasData: !!file.data,
+                    hasTempFilePath: !!file.tempFilePath,
+                    hasMv: typeof file.mv === 'function',
+                    bufferLength: Buffer.isBuffer(file.data) ? file.data.length : 'N/A'
+                });
+                return res.status(400).json({ 
+                    error: 'Could not read file content. File may be corrupted or too large.' 
+                });
+            }
+            
+            if (!svgContent || svgContent.length === 0) {
+                debugLog('error', 'SVG content is empty after reading. File size was:', file.size);
+                return res.status(400).json({ 
+                    error: 'SVG file appears to be empty. Please check the file and try again.' 
+                });
+            }
+            
+            debugLog('api', `Processing uploaded SVG file: ${file.name} (${file.size} bytes, content length: ${svgContent.length} chars)`);
         } else if (req.body.svgContent) {
             // SVG content provided directly in body
             svgContent = req.body.svgContent;
@@ -357,10 +410,12 @@ router.post('/convert', async (req, res) => {
         
         // Validate SVG content
         if (!svgContent || svgContent.length === 0) {
+            debugLog('error', 'SVG content is empty after reading file');
             return res.status(400).json({ error: 'SVG content is empty' });
         }
         
         if (!svgContent.includes('<svg')) {
+            debugLog('error', 'SVG content missing <svg> tag. First 200 chars:', svgContent.substring(0, 200));
             return res.status(400).json({ error: 'Invalid SVG file format: missing <svg> tag' });
         }
         

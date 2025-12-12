@@ -17,6 +17,7 @@ let svgContent = null;
 let detectedPatterns = [];
 let documentDropdown = null;
 let partStudioDropdown = null;
+let planeDropdown = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -57,6 +58,23 @@ function initializeDropdowns() {
             updateUrlParams();
             // Reload planes for new part studio
             await loadPlanes();
+        }
+    });
+    
+    // Initialize plane dropdown
+    planeDropdown = new ContextDropdown({
+        buttonId: 'planeDropdownButton',
+        dropdownId: 'planeDropdown',
+        defaultText: 'Select Plane',
+        onSelect: (plane) => {
+            console.log('Plane selected:', plane);
+            // Update the hidden select for backward compatibility
+            const planeSelect = document.getElementById('planeSelect');
+            if (planeSelect) {
+                planeSelect.value = plane.id;
+                // Trigger change event
+                planeSelect.dispatchEvent(new Event('change'));
+            }
         }
     });
     
@@ -181,10 +199,11 @@ async function handleFileSelect(event) {
         currentFile = file;
         svgContent = await readFileAsText(file);
         
-        // Show file info
-        document.getElementById('selectedFileInfo').textContent = 
-            `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
-        document.getElementById('selectedFileInfo').classList.remove('hidden');
+        // Show file name next to button
+        const fileNameEl = document.getElementById('selectedFileName');
+        if (fileNameEl) {
+            fileNameEl.textContent = `${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+        }
         
         // Show options panel
         document.getElementById('optionsPanel').classList.remove('hidden');
@@ -269,13 +288,11 @@ function displayPatterns(patterns) {
 
 async function loadContext() {
     const banner = document.getElementById('contextBanner');
-    const elemIdEl = document.getElementById('elementId');
     
     // Show banner immediately
     banner.classList.remove('hidden');
     
     if (!documentId || !workspaceId || !elementId) {
-        elemIdEl.textContent = 'Missing URL parameters';
         return;
     }
     
@@ -306,16 +323,12 @@ async function loadContext() {
                 // Load part studios for current document
                 await loadPartStudios(context.documentId);
             }
-            
-            elemIdEl.textContent = context.elementId ? (context.elementId.substring(0, 16) + '...') : 'Unknown';
         } else {
             const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
             console.error('Failed to load context:', response.status, errorData);
-            elemIdEl.textContent = `Error: ${errorData.error || response.statusText}`;
         }
     } catch (error) {
         console.error('Error loading context:', error);
-        elemIdEl.textContent = `Error: ${error.message}`;
     }
 }
 
@@ -327,12 +340,10 @@ async function loadPlanes() {
         return;
     }
     
-    const planeSelect = document.getElementById('planeSelect');
-    const planeSelector = document.getElementById('planeSelector');
-    
-    // Show plane selector immediately
-    planeSelector.classList.remove('hidden');
-    planeSelect.innerHTML = '<option value="">Loading planes...</option>';
+    // Update dropdown button to show loading
+    if (planeDropdown) {
+        planeDropdown.setSelected({ name: 'Loading...', id: '' });
+    }
     
     try {
         const response = await fetch(
@@ -350,14 +361,33 @@ async function loadPlanes() {
                 planeList = planes.groups.flatMap(g => g.planes || []);
             } else if (Array.isArray(planes)) {
                 planeList = planes;
+            } else if (planes.allPlanes && Array.isArray(planes.allPlanes)) {
+                planeList = planes.allPlanes;
             } else if (planes.planes && Array.isArray(planes.planes)) {
                 planeList = planes.planes;
             }
             
             if (planeList.length > 0) {
-                planeSelect.innerHTML = planeList.map(plane => 
-                    `<option value="${plane.id || plane.name}">${plane.name || plane.id}</option>`
-                ).join('');
+                // Update dropdown
+                if (planeDropdown) {
+                    planeDropdown.setItems(planeList);
+                    // Select first plane
+                    if (planeList[0]) {
+                        planeDropdown.setSelected(planeList[0]);
+                    }
+                }
+                
+                // Also update hidden select for backward compatibility
+                const planeSelect = document.getElementById('planeSelect');
+                if (planeSelect) {
+                    planeSelect.innerHTML = planeList.map(plane => 
+                        `<option value="${plane.id || plane.name}">${plane.name || plane.id}</option>`
+                    ).join('');
+                    if (planeList[0]) {
+                        planeSelect.value = planeList[0].id || planeList[0].name;
+                    }
+                }
+                
                 console.log(`Loaded ${planeList.length} planes`);
                 
                 // Enable convert button if file is already selected
@@ -385,21 +415,37 @@ async function loadPlanes() {
     convertButton.classList.remove('hidden');
     
     // Enable button if file is already selected
-    if (currentFile && planeSelect.value) {
+    const planeSelect = document.getElementById('planeSelect');
+    if (currentFile && planeSelect && planeSelect.value) {
         convertButton.disabled = false;
     }
 }
 
 function showDefaultPlanes() {
-    const planeSelect = document.getElementById('planeSelect');
     const defaultPlanes = [
         { id: 'XY', name: 'Front (XY)' },
         { id: 'YZ', name: 'Right (YZ)' },
         { id: 'XZ', name: 'Top (XZ)' }
     ];
-    planeSelect.innerHTML = defaultPlanes.map(plane => 
-        `<option value="${plane.id}">${plane.name}</option>`
-    ).join('');
+    
+    // Update dropdown
+    if (planeDropdown) {
+        planeDropdown.setItems(defaultPlanes);
+        if (defaultPlanes[0]) {
+            planeDropdown.setSelected(defaultPlanes[0]);
+        }
+    }
+    
+    // Also update hidden select for backward compatibility
+    const planeSelect = document.getElementById('planeSelect');
+    if (planeSelect) {
+        planeSelect.innerHTML = defaultPlanes.map(plane => 
+            `<option value="${plane.id}">${plane.name}</option>`
+        ).join('');
+        if (defaultPlanes[0]) {
+            planeSelect.value = defaultPlanes[0].id;
+        }
+    }
     
     // Enable convert button if file is already selected
     if (currentFile) {

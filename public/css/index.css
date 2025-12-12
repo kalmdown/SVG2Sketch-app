@@ -215,10 +215,11 @@ body {
   margin-bottom: 15px;
 }
 
-.file-input-note {
+.selected-file-name {
   color: #666;
   font-size: 0.9em;
   font-style: italic;
+  margin-left: 8px;
 }
 
 .selected-file-info {

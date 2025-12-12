@@ -19,26 +19,32 @@
         <div class="context-item">
           <span class="context-label">Document:</span>
           <div class="context-dropdown-container">
-            <button id="documentDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false">
+            <button id="documentDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Select document">
               <span class="dropdown-button-text">Loading...</span>
               <span class="dropdown-button-icon">▼</span>
             </button>
-            <div id="documentDropdown" class="context-dropdown-content" role="listbox"></div>
+            <div id="documentDropdown" class="context-dropdown-content" role="listbox" aria-label="Document selection"></div>
           </div>
         </div>
         <div class="context-item">
           <span class="context-label">Part Studio:</span>
           <div class="context-dropdown-container">
-            <button id="partStudioDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false">
+            <button id="partStudioDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Select part studio">
               <span class="dropdown-button-text">Loading...</span>
               <span class="dropdown-button-icon">▼</span>
             </button>
-            <div id="partStudioDropdown" class="context-dropdown-content" role="listbox"></div>
+            <div id="partStudioDropdown" class="context-dropdown-content" role="listbox" aria-label="Part studio selection"></div>
           </div>
         </div>
         <div class="context-item">
-          <span class="context-label">Element:</span>
-          <span id="elementId" class="context-value">Loading...</span>
+          <span class="context-label">Plane:</span>
+          <div class="context-dropdown-container">
+            <button id="planeDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Select target plane">
+              <span class="dropdown-button-text">Loading...</span>
+              <span class="dropdown-button-icon">▼</span>
+            </button>
+            <div id="planeDropdown" class="context-dropdown-content" role="listbox" aria-label="Plane selection"></div>
+          </div>
         </div>
       </div>
 
@@ -56,10 +62,8 @@
           <button id="uploadButton" class="button primary" type="button">
             <i class="icon-upload"></i> Choose SVG File
           </button>
-          <span class="file-input-note">(Opens file picker to select .svg file)</span>
+          <span id="selectedFileName" class="selected-file-name"></span>
         </div>
-
-        <div id="selectedFileInfo" class="selected-file-info hidden"></div>
 
         <div class="upload-status-container">
           <span id="uploadStatus"></span>
@@ -105,13 +109,11 @@
           <div id="patternList"></div>
         </div>
 
-        <!-- Plane selection -->
-        <div id="planeSelector" class="plane-selector">
-          <h3>Select Target Plane</h3>
-          <select id="planeSelect">
-            <option value="">Loading planes...</option>
-          </select>
-        </div>
+
+        <!-- Hidden select for backward compatibility -->
+        <select id="planeSelect" class="hidden" aria-label="Select target plane">
+          <option value="">Loading planes...</option>
+        </select>
 
         <!-- Convert button -->
         <button id="convertButton" class="button primary hidden" type="button" disabled>
