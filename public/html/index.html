@@ -4,14 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SVG2Sketch - Enhanced SVG to Onshape Converter</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
-    <link rel="stylesheet" type="text/css" href="/static/css/index.css" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" type="text/css" href="/css/index.css" />
   </head>
   <body>
     <div class="container">
       <div class="top-bar">
         <h1 class="title">SVG2Sketch Converter</h1>
         <p class="subtitle">Enhanced SVG to Onshape Sketch with Text & Pattern Support</p>
+      </div>
+
+      <!-- Document Context Banner -->
+      <div id="contextBanner" class="context-banner">
+        <div class="context-item">
+          <span class="context-label">Document:</span>
+          <div class="context-dropdown-container">
+            <button id="documentDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false">
+              <span class="dropdown-button-text">Loading...</span>
+              <span class="dropdown-button-icon">▼</span>
+            </button>
+            <div id="documentDropdown" class="context-dropdown-content" role="listbox"></div>
+          </div>
+        </div>
+        <div class="context-item">
+          <span class="context-label">Part Studio:</span>
+          <div class="context-dropdown-container">
+            <button id="partStudioDropdownButton" class="context-dropdown-button" type="button" aria-haspopup="true" aria-expanded="false">
+              <span class="dropdown-button-text">Loading...</span>
+              <span class="dropdown-button-icon">▼</span>
+            </button>
+            <div id="partStudioDropdown" class="context-dropdown-content" role="listbox"></div>
+          </div>
+        </div>
+        <div class="context-item">
+          <span class="context-label">Element:</span>
+          <span id="elementId" class="context-value">Loading...</span>
+        </div>
       </div>
 
       <div class="content">
@@ -24,9 +52,12 @@
           aria-label="SVG file input"
         />
 
-        <button id="uploadButton" class="button primary" type="button">
-          <i class="icon-upload"></i> Select SVG File
-        </button>
+        <div class="file-input-group">
+          <button id="uploadButton" class="button primary" type="button">
+            <i class="icon-upload"></i> Choose SVG File
+          </button>
+          <span class="file-input-note">(Opens file picker to select .svg file)</span>
+        </div>
 
         <div id="selectedFileInfo" class="selected-file-info hidden"></div>
 
@@ -75,7 +106,7 @@
         </div>
 
         <!-- Plane selection -->
-        <div id="planeSelector" class="plane-selector hidden">
+        <div id="planeSelector" class="plane-selector">
           <h3>Select Target Plane</h3>
           <select id="planeSelect">
             <option value="">Loading planes...</option>
@@ -92,7 +123,7 @@
       </div>
     </div>
 
-    <script type="module" src="/static/js/main.js"></script>
+    <script type="module" src="/js/main.js"></script>
   </body>
 </html>
 

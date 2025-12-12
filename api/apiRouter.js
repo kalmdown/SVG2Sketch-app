@@ -7,6 +7,7 @@ import fileUpload from 'express-fileupload';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fetch from 'node-fetch';
 
 // Import services
 import OnshapeApiService from '../services/onshape-api.js';
@@ -41,6 +42,194 @@ router.get('/health', (req, res) => {
             node: process.version
         }
     });
+});
+
+// Route to fetch all documents
+router.get('/documents', async (req, res) => {
+    try {
+        // Validate authentication
+        if (!req.user?.accessToken) {
+            return res.status(401).json({ 
+                error: 'Authentication required' 
+            });
+        }
+
+        debugLog('api', 'Fetching all documents');
+        
+        try {
+            const apiUrl = process.env.API_URL || 'https://cad.onshape.com';
+            const docUrl = `${apiUrl}/api/documents`;
+            const docResponse = await fetch(docUrl, {
+                headers: {
+                    'Authorization': `Bearer ${req.user.accessToken}`,
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (docResponse.ok) {
+                const data = await docResponse.json();
+                const documents = data.items || [];
+                debugLog('api', `Found ${documents.length} documents`);
+                res.json(documents.map(doc => ({
+                    id: doc.id,
+                    name: doc.name,
+                    owner: doc.owner?.name,
+                    createdAt: doc.createdAt,
+                    modifiedAt: doc.modifiedAt
+                })));
+            } else {
+                throw new Error(`Failed to fetch documents: ${docResponse.status}`);
+            }
+        } catch (apiError) {
+            debugLog('error', 'Error fetching documents:', apiError);
+            res.status(500).json({ error: apiError.message });
+        }
+    } catch (error) {
+        debugLog('error', 'Error in /documents endpoint:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Route to fetch all elements (part studios) in a document
+router.get('/elements', async (req, res) => {
+    try {
+        const { documentId, workspaceId } = req.query;
+        
+        // Validate required parameters
+        if (!documentId || !workspaceId) {
+            return res.status(400).json({ 
+                error: 'Missing required parameters: documentId, workspaceId' 
+            });
+        }
+
+        // Validate authentication
+        if (!req.user?.accessToken) {
+            return res.status(401).json({ 
+                error: 'Authentication required' 
+            });
+        }
+
+        debugLog('api', `Fetching elements for document: ${documentId}`);
+        
+        try {
+            const elements = await onshapeApi.fetchAllElementsInDocument(
+                req.user.accessToken,
+                documentId,
+                workspaceId
+            );
+            
+            // Filter to only part studios
+            const partStudios = elements
+                .filter(elem => elem.elementType === 'PARTSTUDIO')
+                .map(elem => ({
+                    id: elem.id,
+                    name: (elem.name || `Part Studio ${elem.id}`).replace(/\s*\([^)]*\)$/, ''),
+                    elementType: elem.elementType
+                }));
+            
+            debugLog('api', `Found ${partStudios.length} part studios`);
+            res.json(partStudios);
+        } catch (apiError) {
+            debugLog('error', 'Error fetching elements:', apiError);
+            res.status(500).json({ error: apiError.message });
+        }
+    } catch (error) {
+        debugLog('error', 'Error in /elements endpoint:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Route to fetch document and element info
+router.get('/context', async (req, res) => {
+    try {
+        const { documentId, workspaceId, elementId } = req.query;
+        
+        // Validate required parameters
+        if (!documentId || !workspaceId || !elementId) {
+            return res.status(400).json({ 
+                error: 'Missing required parameters' 
+            });
+        }
+
+        // Validate authentication
+        if (!req.user?.accessToken) {
+            return res.status(401).json({ 
+                error: 'Authentication required' 
+            });
+        }
+
+        debugLog('api', `Fetching context for element: ${elementId}`);
+        
+        try {
+            debugLog('api', `Fetching document info: ${documentId}`);
+            // Fetch document info using fetch directly (since _callApi is private)
+            const apiUrl = process.env.API_URL || 'https://cad.onshape.com';
+            const docUrl = `${apiUrl}/api/documents/d/${documentId}`;
+            const docResponse = await fetch(docUrl, {
+                headers: {
+                    'Authorization': `Bearer ${req.user.accessToken}`,
+                    'Accept': 'application/json'
+                }
+            });
+            
+            debugLog('api', `Document response status: ${docResponse.status}`);
+            let document = { name: null };
+            if (docResponse.ok) {
+                document = await docResponse.json();
+                debugLog('api', `Document name: ${document.name}`);
+            } else {
+                const errorText = await docResponse.text().catch(() => '');
+                debugLog('error', `Failed to fetch document: ${docResponse.status} - ${errorText.substring(0, 200)}`);
+            }
+            
+            debugLog('api', `Fetching element info: ${elementId}`);
+            // Fetch element info
+            const elementUrl = `${apiUrl}/api/documents/d/${documentId}/w/${workspaceId}/elements/${elementId}`;
+            const elementResponse = await fetch(elementUrl, {
+                headers: {
+                    'Authorization': `Bearer ${req.user.accessToken}`,
+                    'Accept': 'application/json'
+                }
+            });
+            
+            debugLog('api', `Element response status: ${elementResponse.status}`);
+            let element = { name: null, elementType: null };
+            if (elementResponse.ok) {
+                element = await elementResponse.json();
+                debugLog('api', `Element name: ${element.name}, type: ${element.elementType}`);
+            } else {
+                const errorText = await elementResponse.text().catch(() => '');
+                debugLog('error', `Failed to fetch element: ${elementResponse.status} - ${errorText.substring(0, 200)}`);
+            }
+            
+            const result = {
+                documentName: document.name || `Document ${documentId.substring(0, 8)}...`,
+                documentId: documentId,
+                workspaceId: workspaceId,
+                elementName: element.name || `Element ${elementId.substring(0, 8)}...`,
+                elementId: elementId,
+                elementType: element.elementType || 'UNKNOWN'
+            };
+            
+            debugLog('api', 'Context result:', result);
+            res.json(result);
+        } catch (apiError) {
+            debugLog('error', 'Error fetching context:', apiError);
+            // Return IDs as fallback
+            res.json({
+                documentName: `Document ${documentId.substring(0, 8)}...`,
+                documentId: documentId,
+                workspaceId: workspaceId,
+                elementName: `Element ${elementId.substring(0, 8)}...`,
+                elementId: elementId,
+                elementType: 'UNKNOWN',
+                error: apiError.message
+            });
+        }
+    } catch (error) {
+        debugLog('error', 'Error in /context endpoint:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Route to fetch planes

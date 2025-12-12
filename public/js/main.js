@@ -2,22 +2,148 @@
  * Main client-side JavaScript for SVG2Sketch app
  */
 
+// Import dependencies
+import { ContextDropdown } from './context-dropdowns.js';
+
 // Get URL parameters
 const urlParams = new URLSearchParams(window.location.search);
-const documentId = urlParams.get('documentId');
-const workspaceId = urlParams.get('workspaceId');
-const elementId = urlParams.get('elementId');
+let documentId = urlParams.get('documentId');
+let workspaceId = urlParams.get('workspaceId');
+let elementId = urlParams.get('elementId');
 
 // State
 let currentFile = null;
 let svgContent = null;
 let detectedPatterns = [];
+let documentDropdown = null;
+let partStudioDropdown = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
+    initializeDropdowns();
+    loadContext();
     loadPlanes();
+    setupPlaneSelectListener();
 });
+
+function initializeDropdowns() {
+    // Initialize document dropdown
+    documentDropdown = new ContextDropdown({
+        buttonId: 'documentDropdownButton',
+        dropdownId: 'documentDropdown',
+        defaultText: 'Select Document',
+        onSelect: async (document) => {
+            console.log('Document selected:', document);
+            documentId = document.id;
+            // Fetch workspaces for the document
+            await loadWorkspaces(document.id);
+            // Update URL without reload
+            updateUrlParams();
+            // Reload part studios for new document
+            await loadPartStudios(document.id);
+        }
+    });
+    
+    // Initialize part studio dropdown
+    partStudioDropdown = new ContextDropdown({
+        buttonId: 'partStudioDropdownButton',
+        dropdownId: 'partStudioDropdown',
+        defaultText: 'Select Part Studio',
+        onSelect: async (partStudio) => {
+            console.log('Part Studio selected:', partStudio);
+            elementId = partStudio.id;
+            // Update URL without reload
+            updateUrlParams();
+            // Reload planes for new part studio
+            await loadPlanes();
+        }
+    });
+    
+    // Load all documents
+    loadDocuments();
+}
+
+function updateUrlParams() {
+    const newUrl = new URL(window.location);
+    if (documentId) newUrl.searchParams.set('documentId', documentId);
+    if (workspaceId) newUrl.searchParams.set('workspaceId', workspaceId);
+    if (elementId) newUrl.searchParams.set('elementId', elementId);
+    window.history.replaceState({}, '', newUrl);
+}
+
+async function loadDocuments() {
+    try {
+        const response = await fetch('/api/documents', {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const documents = await response.json();
+            documentDropdown.setItems(documents);
+            
+            // Select current document if available
+            if (documentId) {
+                const currentDoc = documents.find(d => d.id === documentId);
+                if (currentDoc) {
+                    documentDropdown.setSelected(currentDoc);
+                }
+            }
+        } else {
+            console.error('Failed to load documents');
+        }
+    } catch (error) {
+        console.error('Error loading documents:', error);
+    }
+}
+
+async function loadWorkspaces(docId) {
+    // For now, we'll use the current workspaceId or fetch default
+    // This could be enhanced to fetch all workspaces
+    if (!workspaceId && docId) {
+        // Try to get default workspace - this would need an API endpoint
+        console.log('Loading workspaces for document:', docId);
+    }
+}
+
+async function loadPartStudios(docId) {
+    if (!docId || !workspaceId) return;
+    
+    try {
+        const response = await fetch(
+            `/api/elements?documentId=${docId}&workspaceId=${workspaceId}`,
+            { credentials: 'include' }
+        );
+        
+        if (response.ok) {
+            const partStudios = await response.json();
+            partStudioDropdown.setItems(partStudios);
+            
+            // Select current part studio if available
+            if (elementId) {
+                const currentStudio = partStudios.find(ps => ps.id === elementId);
+                if (currentStudio) {
+                    partStudioDropdown.setSelected(currentStudio);
+                }
+            }
+        } else {
+            console.error('Failed to load part studios');
+        }
+    } catch (error) {
+        console.error('Error loading part studios:', error);
+    }
+}
+
+function setupPlaneSelectListener() {
+    const planeSelect = document.getElementById('planeSelect');
+    const convertButton = document.getElementById('convertButton');
+    
+    planeSelect.addEventListener('change', () => {
+        // Enable convert button if both file and plane are selected
+        convertButton.disabled = !planeSelect.value || !currentFile;
+        console.log('Plane selected:', planeSelect.value, 'File selected:', !!currentFile, 'Button disabled:', convertButton.disabled);
+    });
+}
 
 function initializeEventListeners() {
     const fileInput = document.getElementById('fileInput');
@@ -62,6 +188,18 @@ async function handleFileSelect(event) {
         
         // Show options panel
         document.getElementById('optionsPanel').classList.remove('hidden');
+        
+        // Enable convert button if plane is already selected
+        const planeSelect = document.getElementById('planeSelect');
+        const convertButton = document.getElementById('convertButton');
+        if (planeSelect.value) {
+            convertButton.disabled = false;
+        }
+        
+        // Add change listener to plane select
+        planeSelect.addEventListener('change', () => {
+            convertButton.disabled = !planeSelect.value || !currentFile;
+        });
         
         // Process for patterns if enabled
         const detectPatterns = document.getElementById('detectPatterns').checked;
@@ -129,11 +267,72 @@ function displayPatterns(patterns) {
     `).join('');
 }
 
+async function loadContext() {
+    const banner = document.getElementById('contextBanner');
+    const elemIdEl = document.getElementById('elementId');
+    
+    // Show banner immediately
+    banner.classList.remove('hidden');
+    
+    if (!documentId || !workspaceId || !elementId) {
+        elemIdEl.textContent = 'Missing URL parameters';
+        return;
+    }
+    
+    try {
+        console.log('Loading context for:', { documentId, workspaceId, elementId });
+        const response = await fetch(
+            `/api/context?documentId=${documentId}&workspaceId=${workspaceId}&elementId=${elementId}`,
+            { credentials: 'include' }
+        );
+        
+        console.log('Context response status:', response.status);
+        
+        if (response.ok) {
+            const context = await response.json();
+            console.log('Context data:', context);
+            
+            // Update dropdowns with current selection
+            if (documentDropdown) {
+                const currentDoc = { id: context.documentId, name: context.documentName };
+                documentDropdown.setSelected(currentDoc);
+                // Load all documents and select current
+                await loadDocuments();
+            }
+            
+            if (partStudioDropdown) {
+                const currentStudio = { id: context.elementId, name: context.elementName };
+                partStudioDropdown.setSelected(currentStudio);
+                // Load part studios for current document
+                await loadPartStudios(context.documentId);
+            }
+            
+            elemIdEl.textContent = context.elementId ? (context.elementId.substring(0, 16) + '...') : 'Unknown';
+        } else {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('Failed to load context:', response.status, errorData);
+            elemIdEl.textContent = `Error: ${errorData.error || response.statusText}`;
+        }
+    } catch (error) {
+        console.error('Error loading context:', error);
+        elemIdEl.textContent = `Error: ${error.message}`;
+    }
+}
+
 async function loadPlanes() {
     if (!documentId || !workspaceId || !elementId) {
         showStatus('Missing document parameters. Please open from Onshape.', 'error');
+        // Still show plane selector with default planes
+        showDefaultPlanes();
         return;
     }
+    
+    const planeSelect = document.getElementById('planeSelect');
+    const planeSelector = document.getElementById('planeSelector');
+    
+    // Show plane selector immediately
+    planeSelector.classList.remove('hidden');
+    planeSelect.innerHTML = '<option value="">Loading planes...</option>';
     
     try {
         const response = await fetch(
@@ -143,26 +342,68 @@ async function loadPlanes() {
         
         if (response.ok) {
             const planes = await response.json();
-            const planeSelect = document.getElementById('planeSelect');
-            const planeSelector = document.getElementById('planeSelector');
+            console.log('Planes response:', planes);
             
             // Handle both grouped and flat responses
-            const planeList = planes.groups ? 
-                planes.groups.flatMap(g => g.planes) : 
-                planes;
+            let planeList = [];
+            if (planes.groups && Array.isArray(planes.groups)) {
+                planeList = planes.groups.flatMap(g => g.planes || []);
+            } else if (Array.isArray(planes)) {
+                planeList = planes;
+            } else if (planes.planes && Array.isArray(planes.planes)) {
+                planeList = planes.planes;
+            }
             
-            planeSelect.innerHTML = planeList.map(plane => 
-                `<option value="${plane.id}">${plane.name}</option>`
-            ).join('');
-            
-            planeSelector.classList.remove('hidden');
-            document.getElementById('convertButton').classList.remove('hidden');
+            if (planeList.length > 0) {
+                planeSelect.innerHTML = planeList.map(plane => 
+                    `<option value="${plane.id || plane.name}">${plane.name || plane.id}</option>`
+                ).join('');
+                console.log(`Loaded ${planeList.length} planes`);
+                
+                // Enable convert button if file is already selected
+                if (currentFile) {
+                    document.getElementById('convertButton').disabled = false;
+                }
+            } else {
+                console.warn('No planes in response, using defaults');
+                showDefaultPlanes();
+            }
         } else {
-            showStatus('Failed to load planes.', 'error');
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Failed to load planes:', response.status, errorData);
+            showStatus('Failed to load planes. Using default planes.', 'info');
+            showDefaultPlanes();
         }
     } catch (error) {
-        showStatus(`Error loading planes: ${error.message}`, 'error');
         console.error('Plane loading error:', error);
+        showStatus(`Error loading planes: ${error.message}. Using default planes.`, 'info');
+        showDefaultPlanes();
+    }
+    
+    // Always show convert button after planes are loaded (or defaulted)
+    const convertButton = document.getElementById('convertButton');
+    convertButton.classList.remove('hidden');
+    
+    // Enable button if file is already selected
+    if (currentFile && planeSelect.value) {
+        convertButton.disabled = false;
+    }
+}
+
+function showDefaultPlanes() {
+    const planeSelect = document.getElementById('planeSelect');
+    const defaultPlanes = [
+        { id: 'XY', name: 'Front (XY)' },
+        { id: 'YZ', name: 'Right (YZ)' },
+        { id: 'XZ', name: 'Top (XZ)' }
+    ];
+    planeSelect.innerHTML = defaultPlanes.map(plane => 
+        `<option value="${plane.id}">${plane.name}</option>`
+    ).join('');
+    
+    // Enable convert button if file is already selected
+    if (currentFile) {
+        document.getElementById('convertButton').disabled = false;
     }
 }
 

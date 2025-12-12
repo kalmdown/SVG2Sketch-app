@@ -270,8 +270,17 @@ app.use((err, req, res, _next) => {
     });
 });
 
-// Catch-all route for SPA
-app.get('*', (req, res) => {
+// Catch-all route for SPA (but not for static files or API routes)
+app.get('*', (req, res, next) => {
+  // Don't catch static file requests or API routes
+  if (req.path.startsWith('/api/') || 
+      req.path.startsWith('/css/') || 
+      req.path.startsWith('/js/') || 
+      req.path.startsWith('/html/') ||
+      req.path.startsWith('/favicon.ico') ||
+      req.path.match(/\.(css|js|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/)) {
+    return next(); // Let Express handle 404 for these
+  }
   res.sendFile(path.join(__dirname, 'public', 'html', 'index.html'));
 });
 
