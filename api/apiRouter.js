@@ -93,11 +93,22 @@ router.get('/documents', async (req, res) => {
 
 // Route to fetch all elements (part studios) in a document
 router.get('/elements', async (req, res) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:95',message:'/elements endpoint entry',data:{query:req.query,hasUser:!!req.user,hasAccessToken:!!req.user?.accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     try {
         const { documentId, workspaceId } = req.query;
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:101',message:'Parameter validation',data:{documentId,workspaceId,hasDocumentId:!!documentId,hasWorkspaceId:!!workspaceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         // Validate required parameters
         if (!documentId || !workspaceId) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:107',message:'Missing parameters error',data:{documentId,workspaceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             return res.status(400).json({ 
                 error: 'Missing required parameters: documentId, workspaceId' 
             });
@@ -105,6 +116,9 @@ router.get('/elements', async (req, res) => {
 
         // Validate authentication
         if (!req.user?.accessToken) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:115',message:'Authentication error',data:{hasUser:!!req.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
             return res.status(401).json({ 
                 error: 'Authentication required' 
             });
@@ -113,11 +127,19 @@ router.get('/elements', async (req, res) => {
         debugLog('api', `Fetching elements for document: ${documentId}`);
         
         try {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:125',message:'Calling fetchAllElementsInDocument',data:{documentId,workspaceId,hasOnshapeApi:!!onshapeApi,hasMethod:typeof onshapeApi.fetchAllElementsInDocument},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            
             const elements = await onshapeApi.fetchAllElementsInDocument(
                 req.user.accessToken,
                 documentId,
                 workspaceId
             );
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:133',message:'Elements received',data:{elementsCount:Array.isArray(elements)?elements.length:'not array',elementTypes:Array.isArray(elements)?elements.map(e=>e.elementType):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
             
             // Filter to only part studios
             const partStudios = elements
@@ -128,13 +150,38 @@ router.get('/elements', async (req, res) => {
                     elementType: elem.elementType
                 }));
             
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:142',message:'Part studios filtered',data:{partStudiosCount:partStudios.length,partStudios:partStudios.map(ps=>({id:ps.id,name:ps.name}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            
             debugLog('api', `Found ${partStudios.length} part studios`);
-            res.json(partStudios);
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:157',message:'About to send response',data:{partStudiosCount:partStudios.length,canStringify:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            
+            try {
+                res.json(partStudios);
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:163',message:'Response sent successfully',data:{partStudiosCount:partStudios.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+            } catch (jsonError) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:167',message:'Error sending JSON response',data:{error:jsonError.message,stack:jsonError.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                // #endregion
+                throw jsonError;
+            }
         } catch (apiError) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:149',message:'API error in fetchAllElementsInDocument',data:{error:apiError.message,stack:apiError.stack,errorType:apiError.constructor.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
             debugLog('error', 'Error fetching elements:', apiError);
             res.status(500).json({ error: apiError.message });
         }
     } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:155',message:'Top-level error in /elements',data:{error:error.message,stack:error.stack,errorType:error.constructor.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
         debugLog('error', 'Error in /elements endpoint:', error);
         res.status(500).json({ error: error.message });
     }
@@ -463,31 +510,84 @@ router.post('/convert', async (req, res) => {
             // Invalid JSON, ignore
         }
         
-        // Create sketch in Onshape
-        const result = await onshapeApi.createSketchFromElements({
-            documentId,
-            workspaceId,
-            elementId,
-            planeId,
-            elements: visibleElements,
-            textElements: textElements,
-            textPathElements: textPathElements,
-            patterns: selectedPatterns,
-            accessToken: req.user.accessToken,
-            options: {
-                scale: parseFloat(scale) || 1.0,
-                textAsSketchText: textAsSketchText === true || textAsSketchText === 'true',
-                textAsPaths: textAsPaths === true || textAsPaths === 'true',
-                sketchName: `SVG Import ${new Date().toLocaleTimeString()}`
+        // Determine which mode to use
+        // Use v47 (IF) if: patterns detected, text-to-paths enabled, or explicitly requested
+        const useV47 = req.body.useV47 === 'true' || req.body.useV47 === true || 
+                       selectedPatterns.length > 0 || 
+                       (textAsPaths && textElements.length > 0);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:513',message:'Conversion mode decision',data:{useV47,hasPatterns:selectedPatterns.length>0,textAsPaths,textElementCount:textElements.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        
+        let result;
+        
+        if (useV47) {
+            // Use v47 with Intermediate Format
+            const { generateIntermediateFormat } = await import('../services/if-generator.js');
+            const { detectPatterns } = await import('../services/svg/pattern-analyzer.js');
+            
+            // Detect patterns if not already provided
+            let detectedPatterns = selectedPatterns;
+            if (detectedPatterns.length === 0) {
+                detectedPatterns = detectPatterns(elements);
+                debugLog('api', `Detected ${detectedPatterns.length} patterns`);
             }
-        });
+            
+            // Generate Intermediate Format
+            const intermediateFormat = generateIntermediateFormat(
+                visibleElements,
+                textElements,
+                detectedPatterns,
+                {
+                    scale: parseFloat(scale) || 0.001
+                }
+            );
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:540',message:'Intermediate Format generated',data:{ifLength:intermediateFormat.length,patternCount:detectedPatterns.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+            // #endregion
+            
+            // Create sketch using FeatureScript v47 with IF
+            result = await onshapeApi.createSketchFromIF({
+                documentId,
+                workspaceId,
+                elementId,
+                planeId,
+                intermediateFormat: intermediateFormat,
+                accessToken: req.user.accessToken,
+                options: {
+                    scale: parseFloat(scale) || 1.0,
+                    debugMode: false,
+                    sketchName: `SVG Import ${new Date().toLocaleTimeString()}`,
+                    featureType: process.env.ONSHAPE_FEATURE_TYPE_ID_V47 || "SVG to Sketch 47"
+                }
+            });
+        } else {
+            // Use v46.2 with raw SVG (backward compatible)
+            result = await onshapeApi.createSketchFromSVG({
+                documentId,
+                workspaceId,
+                elementId,
+                planeId,
+                svgContent: svgContent,  // Pass raw SVG string to FeatureScript
+                accessToken: req.user.accessToken,
+                options: {
+                    scale: parseFloat(scale) || 1.0,
+                    debugMode: false,
+                    sketchName: `SVG Import ${new Date().toLocaleTimeString()}`
+                }
+            });
+        }
         
         res.json({ 
             success: true, 
             ...result,
+            mode: useV47 ? 'v47-IF' : 'v46.2-SVG',
             elementCount: visibleElements.length,
             textElementCount: textElements.length,
-            textPathElementCount: textPathElements.length
+            textPathElementCount: textPathElements.length,
+            patternCount: selectedPatterns.length
         });
     } catch (error) {
         debugLog('error', 'Conversion endpoint failed', error);

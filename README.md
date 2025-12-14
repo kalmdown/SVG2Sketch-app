@@ -90,7 +90,13 @@ SVG2Sketch-app/
    OAUTH_CALLBACK_URL=https://your-domain.com/oauthRedirect
    SESSION_SECRET=your_session_secret
    DEBUG=true
+   
+   # FeatureScript v47 Feature Type ID (required for v47 mode)
+   # See FIND_FEATURE_TYPE_ID.md for instructions on how to find this
+   ONSHAPE_FEATURE_TYPE_ID_V47=SVG to Sketch 47::e7a355754e359de9fbe54de5
    ```
+   
+   **Important**: See [FIND_FEATURE_TYPE_ID.md](./FIND_FEATURE_TYPE_ID.md) for detailed instructions on finding the `ONSHAPE_FEATURE_TYPE_ID_V47` value.
 
 3. **Run the Server**
    ```bash
