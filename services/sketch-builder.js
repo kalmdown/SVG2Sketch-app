@@ -17,6 +17,32 @@ import { parsePathData } from './svg/path-parser.js';
  * @returns {Promise<Object>} Sketch feature data for Onshape API
  */
 export async function buildSketchFeature(elements, textElements = [], textPathElements = [], patterns = [], options = {}) {
+    // DEBUG MODE: Return hardcoded single circle for testing basic connectivity
+    if (process.env.DEBUG_SKETCH_MODE === 'simple-circle') {
+        debugLog('debug', '=== DEBUG MODE ACTIVE: Returning hardcoded circle ===');
+        return {
+            entities: [
+                {
+                    "btType": "BTMSketchCurve-4",
+                    "entityId": "debug_circle_1", 
+                    "centerId": "debug_circle_1.center",
+                    "isConstruction": false,
+                    "parameters": [],
+                    "geometry": {
+                        "btType": "BTCurveGeometryCircle-115",
+                        "radius": 0.05, // 50mm
+                        "xCenter": 0.0,
+                        "yCenter": 0.0,
+                        "xDir": 1,
+                        "yDir": 0,
+                        "clockwise": false
+                    }
+                }
+            ],
+            entityCount: 1
+        };
+    }
+    
     const { scale = 0.001, textAsSketchText = true } = options; // Default scale: 1px = 1mm
     
     const sketchEntities = [];

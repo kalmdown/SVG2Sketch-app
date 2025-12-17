@@ -495,6 +495,7 @@ async function handleConvert() {
         formData.append('textAsSketchText', document.getElementById('textAsSketchText').checked);
         formData.append('textAsPaths', document.getElementById('textAsPaths').checked);
         formData.append('patterns', JSON.stringify(selectedPatterns));
+        formData.append('useBTM', 'true');  // Use BTM mode (native Onshape sketch creation)
         
         const response = await fetch('/api/convert', {
             method: 'POST',

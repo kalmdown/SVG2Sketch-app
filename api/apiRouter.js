@@ -48,39 +48,37 @@ router.get('/health', (req, res) => {
 // Route to fetch all documents
 router.get('/documents', async (req, res) => {
     try {
-        // Validate authentication
-        if (!req.user?.accessToken) {
+        // Determine authentication - prefer OAuth token, fallback to API keys
+        let auth = null;
+        if (req.user?.accessToken) {
+            auth = { accessToken: req.user.accessToken };
+        } else if (process.env.ONSHAPE_ACCESS_KEY && process.env.ONSHAPE_SECRET_KEY) {
+            auth = { 
+                apiKey: { 
+                    accessKey: process.env.ONSHAPE_ACCESS_KEY, 
+                    secretKey: process.env.ONSHAPE_SECRET_KEY 
+                } 
+            };
+        } else {
             return res.status(401).json({ 
-                error: 'Authentication required' 
+                error: 'Authentication required. Please log in or configure API keys.' 
             });
         }
 
         debugLog('api', 'Fetching all documents');
         
         try {
-            const apiUrl = process.env.API_URL || 'https://cad.onshape.com';
-            const docUrl = `${apiUrl}/api/documents`;
-            const docResponse = await fetch(docUrl, {
-                headers: {
-                    'Authorization': `Bearer ${req.user.accessToken}`,
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (docResponse.ok) {
-                const data = await docResponse.json();
-                const documents = data.items || [];
-                debugLog('api', `Found ${documents.length} documents`);
-                res.json(documents.map(doc => ({
-                    id: doc.id,
-                    name: doc.name,
-                    owner: doc.owner?.name,
-                    createdAt: doc.createdAt,
-                    modifiedAt: doc.modifiedAt
-                })));
-            } else {
-                throw new Error(`Failed to fetch documents: ${docResponse.status}`);
-            }
+            // Use OnshapeApiService which supports both auth types
+            const data = await onshapeApi.getDocuments(auth);
+            const documents = data.items || [];
+            debugLog('api', `Found ${documents.length} documents`);
+            res.json(documents.map(doc => ({
+                id: doc.id,
+                name: doc.name,
+                owner: doc.owner?.name,
+                createdAt: doc.createdAt,
+                modifiedAt: doc.modifiedAt
+            })));
         } catch (apiError) {
             debugLog('error', 'Error fetching documents:', apiError);
             res.status(500).json({ error: apiError.message });
@@ -114,13 +112,23 @@ router.get('/elements', async (req, res) => {
             });
         }
 
-        // Validate authentication
-        if (!req.user?.accessToken) {
+        // Determine authentication - prefer OAuth token, fallback to API keys
+        let auth = null;
+        if (req.user?.accessToken) {
+            auth = { accessToken: req.user.accessToken };
+        } else if (process.env.ONSHAPE_ACCESS_KEY && process.env.ONSHAPE_SECRET_KEY) {
+            auth = { 
+                apiKey: { 
+                    accessKey: process.env.ONSHAPE_ACCESS_KEY, 
+                    secretKey: process.env.ONSHAPE_SECRET_KEY 
+                } 
+            };
+        } else {
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:115',message:'Authentication error',data:{hasUser:!!req.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             return res.status(401).json({ 
-                error: 'Authentication required' 
+                error: 'Authentication required. Please log in or configure API keys.' 
             });
         }
 
@@ -128,21 +136,20 @@ router.get('/elements', async (req, res) => {
         
         try {
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:125',message:'Calling fetchAllElementsInDocument',data:{documentId,workspaceId,hasOnshapeApi:!!onshapeApi,hasMethod:typeof onshapeApi.fetchAllElementsInDocument},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:125',message:'Calling getElements',data:{documentId,workspaceId,hasOnshapeApi:!!onshapeApi,hasMethod:typeof onshapeApi.getElements},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
             
-            const elements = await onshapeApi.fetchAllElementsInDocument(
-                req.user.accessToken,
-                documentId,
-                workspaceId
-            );
+            const data = await onshapeApi.getElements(documentId, workspaceId, auth);
+            
+            // Handle response format - could be array or object with items
+            const elementsArray = Array.isArray(data) ? data : (data.items || []);
             
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:133',message:'Elements received',data:{elementsCount:Array.isArray(elements)?elements.length:'not array',elementTypes:Array.isArray(elements)?elements.map(e=>e.elementType):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:133',message:'Elements received',data:{elementsCount:elementsArray.length,elementTypes:elementsArray.map(e=>e.elementType)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
             
             // Filter to only part studios
-            const partStudios = elements
+            const partStudios = elementsArray
                 .filter(elem => elem.elementType === 'PARTSTUDIO')
                 .map(elem => ({
                     id: elem.id,
@@ -292,23 +299,106 @@ router.get('/planes', async (req, res) => {
             });
         }
 
-        // Validate authentication
-        if (!req.user?.accessToken) {
+        // Determine authentication - prefer OAuth token, fallback to API keys
+        let auth = null;
+        if (req.user?.accessToken) {
+            auth = { accessToken: req.user.accessToken };
+        } else if (process.env.ONSHAPE_ACCESS_KEY && process.env.ONSHAPE_SECRET_KEY) {
+            auth = { 
+                apiKey: { 
+                    accessKey: process.env.ONSHAPE_ACCESS_KEY, 
+                    secretKey: process.env.ONSHAPE_SECRET_KEY 
+                } 
+            };
+        } else {
             return res.status(401).json({ 
-                error: 'Authentication required' 
+                error: 'Authentication required. Please log in or configure API keys.' 
             });
         }
 
         debugLog('api', `Fetching planes for element: ${elementId}`);
+        console.log('[PLANES] Endpoint called with:', { documentId, workspaceId, elementId });
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:319',message:'PLANES endpoint called',data:{documentId,workspaceId,elementId,hasAuth:!!auth},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         
         try {
-            const planes = await onshapeApi.fetchPlanes(
-                req.user.accessToken,
-                documentId,
-                workspaceId,
-                elementId
-            );
-            res.json(planes);
+            // Use getFeatures to get planes - need to parse features response
+            const featuresResponse = await onshapeApi.getFeatures(documentId, workspaceId, elementId, auth);
+            console.log('[PLANES] Features response:', {
+                hasFeatures: !!featuresResponse?.features,
+                featuresCount: featuresResponse?.features?.length || 0,
+                responseKeys: Object.keys(featuresResponse || {}),
+                firstFeature: featuresResponse?.features?.[0] ? {
+                    btType: featuresResponse.features[0].btType,
+                    featureType: featuresResponse.features[0].featureType,
+                    name: featuresResponse.features[0].name,
+                    featureId: featuresResponse.features[0].featureId
+                } : null
+            });
+            
+            // Start with default planes
+            const defaultPlanes = [
+                { id: `${elementId}_XY`, name: 'Front (XY)', type: 'default' },
+                { id: `${elementId}_YZ`, name: 'Right (YZ)', type: 'default' },
+                { id: `${elementId}_XZ`, name: 'Top (XZ)', type: 'default' }
+            ];
+            
+            // Extract custom planes from features
+            const customPlanes = [];
+            const planeTypes = ['cPlane', 'cPlanePoint', 'cPlane3Points', 'cPlaneMidpoint', 'datumPlane'];
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:337',message:'Features response structure',data:{hasFeatures:!!featuresResponse?.features,featuresCount:featuresResponse?.features?.length||0,responseKeys:Object.keys(featuresResponse||{}),firstFeatureKeys:featuresResponse?.features?.[0]?Object.keys(featuresResponse.features[0]):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            
+            if (featuresResponse && featuresResponse.features && Array.isArray(featuresResponse.features)) {
+                console.log(`[PLANES] Checking ${featuresResponse.features.length} features for planes`);
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:345',message:'PLANES checking features',data:{featuresCount:featuresResponse.features.length,firstFewFeatures:featuresResponse.features.slice(0,3).map(f=>({btType:f.btType,featureType:f.featureType,name:f.name,featureId:f.featureId}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
+                featuresResponse.features.forEach((feature, index) => {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:343',message:'Checking feature for plane',data:{index,btType:feature.btType,featureType:feature.featureType,featureName:feature.name,featureId:feature.featureId,featureKeys:Object.keys(feature)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                    // #endregion
+                    // Check feature type - can be btType string ("BTMFeature-134" for planes), numeric type (134), or featureType string
+                    const btType = feature.btType || '';
+                    const featureType = feature.featureType || feature.type || feature.typeName;
+                    const featureTypeStr = typeof featureType === 'string' ? featureType : '';
+                    const featureName = feature.message?.name || feature.name || feature.featureId;
+                    const featureId = feature.message?.featureId || feature.featureId || feature.id;
+                    
+                    // Check if it's a plane feature
+                    // BTMFeature-134 is the btType for plane features (string)
+                    const isPlaneBtType = btType === 'BTMFeature-134' || btType.includes('Plane');
+                    // Also check numeric type (134 = BTMFeature-134)
+                    const isNumericPlaneType = feature.type === 134;
+                    // Also check featureType for plane-related types
+                    const isStringPlaneType = typeof featureTypeStr === 'string' && (featureTypeStr === 'newPlane' || planeTypes.some(pt => featureTypeStr.includes(pt)));
+                    const matchesPlaneName = featureName && (featureName.toLowerCase().includes('plane') || featureName.toLowerCase().includes('datum'));
+                    
+                    if ((isPlaneBtType || isNumericPlaneType || isStringPlaneType || matchesPlaneName) && featureId) {
+                        const detectionMethod = isNumericPlaneType ? 'numeric' : isPlaneBtType ? 'btType' : isStringPlaneType ? 'featureType' : 'name';
+                        console.log(`[PLANES] Found plane: ${featureName} (${featureId}) - btType: ${btType}, type: ${feature.type}, featureType: ${featureTypeStr}, method: ${detectionMethod}`);
+                        customPlanes.push({
+                            id: featureId,
+                            name: featureName || `Plane ${featureId}`,
+                            type: 'custom'
+                        });
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:360',message:'Added custom plane',data:{planeId:featureId,planeName:featureName,btType,featureType:featureTypeStr,featureTypeNumeric:feature.type,detectionMethod},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                        // #endregion
+                    }
+                });
+            }
+            
+            console.log(`[PLANES] Returning ${defaultPlanes.length} default planes and ${customPlanes.length} custom planes`);
+            debugLog('api', `Found ${customPlanes.length} custom planes`);
+            const allPlanes = [...defaultPlanes, ...customPlanes];
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:385',message:'PLANES endpoint returning planes',data:{defaultPlanesCount:defaultPlanes.length,customPlanesCount:customPlanes.length,totalPlanes:allPlanes.length,planeIds:allPlanes.map(p=>p.id),planeNames:allPlanes.map(p=>p.name)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            res.json(allPlanes);
         } catch (apiError) {
             debugLog('error', 'Error fetching planes:', apiError);
             // Fallback to default planes if API call fails
@@ -355,10 +445,10 @@ router.post('/patterns/detect', async (req, res) => {
 // Route to handle SVG file upload and conversion
 router.post('/convert', async (req, res) => {
     try {
-        // Check authentication
-        if (!req.user?.accessToken) {
+        // Check authentication - allow API keys as fallback
+        if (!req.user?.accessToken && !(process.env.ONSHAPE_ACCESS_KEY && process.env.ONSHAPE_SECRET_KEY)) {
             return res.status(401).json({ 
-                error: 'Authentication required' 
+                error: 'Authentication required. Please log in or configure API keys.' 
             });
         }
 
@@ -511,18 +601,69 @@ router.post('/convert', async (req, res) => {
         }
         
         // Determine which mode to use
-        // Use v47 (IF) if: patterns detected, text-to-paths enabled, or explicitly requested
-        const useV47 = req.body.useV47 === 'true' || req.body.useV47 === true || 
+        // Priority: BTM > v47 (IF) > v46.2 (raw SVG)
+        const useBTM = req.body.useBTM === 'true' || req.body.useBTM === true || 
+                       process.env.USE_BTM_MODE === 'true';
+        const useV47 = !useBTM && (req.body.useV47 === 'true' || req.body.useV47 === true || 
                        selectedPatterns.length > 0 || 
-                       (textAsPaths && textElements.length > 0);
+                       (textAsPaths && textElements.length > 0));
         
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:513',message:'Conversion mode decision',data:{useV47,hasPatterns:selectedPatterns.length>0,textAsPaths,textElementCount:textElements.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/c51d25f2-8d26-4f89-8d36-646b610f4372',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:513',message:'Conversion mode decision',data:{useBTM,useV47,hasPatterns:selectedPatterns.length>0,textAsPaths,textElementCount:textElements.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
         // #endregion
         
         let result;
         
-        if (useV47) {
+        // Determine authentication - prefer OAuth token, fallback to API keys
+        let auth = null;
+        if (req.user?.accessToken) {
+            auth = { accessToken: req.user.accessToken };
+        } else if (process.env.ONSHAPE_ACCESS_KEY && process.env.ONSHAPE_SECRET_KEY) {
+            auth = { 
+                apiKey: { 
+                    accessKey: process.env.ONSHAPE_ACCESS_KEY, 
+                    secretKey: process.env.ONSHAPE_SECRET_KEY 
+                } 
+            };
+        } else {
+            return res.status(401).json({ 
+                error: 'No authentication available. Please log in or configure API keys.' 
+            });
+        }
+        
+        if (useBTM) {
+            // Use BTM (Binary Tree Model) - native Onshape sketch creation
+            const { buildSketchFeature } = await import('../services/sketch-builder.js');
+            
+            // Build BTM entities from parsed SVG elements
+            const sketchData = await buildSketchFeature(
+                visibleElements,
+                textElements,
+                textPathElements,
+                selectedPatterns,
+                {
+                    scale: parseFloat(scale) || 0.001,
+                    textAsSketchText: textAsSketchText,
+                    sketchName: `SVG Import ${new Date().toLocaleTimeString()}`
+                }
+            );
+            
+            debugLog('api', `Generated ${sketchData.entities.length} BTM entities`);
+            
+            // Create sketch using BTM
+            result = await onshapeApi.createSketchFromBTM({
+                documentId,
+                workspaceId,
+                elementId,
+                planeId,
+                entities: sketchData.entities,
+                ...auth,
+                options: {
+                    sketchName: `SVG Import ${new Date().toLocaleTimeString()}`,
+                    scale: parseFloat(scale) || 0.001
+                }
+            });
+        } else if (useV47) {
             // Use v47 with Intermediate Format
             const { generateIntermediateFormat } = await import('../services/if-generator.js');
             const { detectPatterns } = await import('../services/svg/pattern-analyzer.js');
@@ -555,7 +696,7 @@ router.post('/convert', async (req, res) => {
                 elementId,
                 planeId,
                 intermediateFormat: intermediateFormat,
-                accessToken: req.user.accessToken,
+                ...auth,
                 options: {
                     scale: parseFloat(scale) || 1.0,
                     debugMode: false,
@@ -571,7 +712,7 @@ router.post('/convert', async (req, res) => {
                 elementId,
                 planeId,
                 svgContent: svgContent,  // Pass raw SVG string to FeatureScript
-                accessToken: req.user.accessToken,
+                ...auth,
                 options: {
                     scale: parseFloat(scale) || 1.0,
                     debugMode: false,
@@ -583,7 +724,7 @@ router.post('/convert', async (req, res) => {
         res.json({ 
             success: true, 
             ...result,
-            mode: useV47 ? 'v47-IF' : 'v46.2-SVG',
+            mode: useBTM ? 'BTM' : (useV47 ? 'v47-IF' : 'v46.2-SVG'),
             elementCount: visibleElements.length,
             textElementCount: textElements.length,
             textPathElementCount: textPathElements.length,
