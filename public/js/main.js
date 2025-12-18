@@ -354,6 +354,9 @@ async function loadPlanes() {
         if (response.ok) {
             const planes = await response.json();
             console.log('Planes response:', planes);
+            console.log('Planes count:', Array.isArray(planes) ? planes.length : 0);
+            console.log('Plane IDs:', Array.isArray(planes) ? planes.map(p => p.id) : []);
+            console.log('Plane names:', Array.isArray(planes) ? planes.map(p => p.name) : []);
             
             // Handle both grouped and flat responses
             let planeList = [];
@@ -367,13 +370,17 @@ async function loadPlanes() {
                 planeList = planes.planes;
             }
             
+            console.log('Plane list after parsing:', planeList.length, 'planes');
+            
             if (planeList.length > 0) {
                 // Update dropdown
                 if (planeDropdown) {
+                    console.log('Setting dropdown items:', planeList.length);
                     planeDropdown.setItems(planeList);
                     // Select first plane
                     if (planeList[0]) {
                         planeDropdown.setSelected(planeList[0]);
+                        console.log('Selected first plane:', planeList[0].name);
                     }
                 }
                 

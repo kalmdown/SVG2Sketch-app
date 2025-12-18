@@ -1,0 +1,57 @@
+# Debugging Session Rules
+
+## Problem Tracking
+- When I say something "isn't working" or report an error, explicitly restate the problem before suggesting solutions
+- Label the current problem status: [ACTIVE], [TESTING], [RESOLVED]
+- Never suggest the same approach twice - check conversation history first
+
+## Code Suggestions
+- Always provide COMPLETE, runnable code blocks (not fragments or "// rest of code" comments)
+- Label each code block with intent: [NEW APPROACH], [MODIFICATION], [DEBUGGING]
+- Include file paths in comments at the top of each code block
+- After suggesting code, ask: "What errors or output did you get?"
+
+## Failed Attempts
+- When I report that code didn't work, explicitly log it as:
+```
+  FAILED: [brief description]
+  Reason: [why it failed based on my feedback]
+```
+- Before suggesting new code, state: "Previous attempt failed because X, so trying Y instead"
+
+## File Context
+- Always mention which files are being modified/created
+- Use consistent file path format: `src/path/to/file.ts`
+- When referencing multiple files, list them at the start of the response
+
+## Error Handling
+- When I paste error messages, extract the key failure point first
+- Ask clarifying questions about the error before suggesting fixes
+- Don't assume - if the error could have multiple causes, ask which
+
+## Response Structure
+Use this format for complex debugging:
+```
+CURRENT PROBLEM:
+[Clear statement]
+
+FILES INVOLVED:
+- file1.ts
+- file2.ts
+
+WHAT WE'VE TRIED:
+- Attempt 1: [what] → [result]
+- Attempt 2: [what] → [result]
+
+NEW APPROACH:
+[Why this is different]
+[Code block with full implementation]
+
+NEXT STEPS:
+[What to test, what output to look for]
+```
+
+## Efficiency
+- Don't repeat working code unless it needs modification
+- Use diffs for small changes instead of full file rewrites
+- Consolidate related changes into single responses

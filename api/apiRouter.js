@@ -325,6 +325,11 @@ router.get('/planes', async (req, res) => {
         try {
             // Use getFeatures to get planes - need to parse features response
             const featuresResponse = await onshapeApi.getFeatures(documentId, workspaceId, elementId, auth);
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:327',message:'Raw features API response',data:{hasResponse:!!featuresResponse,responseType:typeof featuresResponse,responseKeys:featuresResponse?Object.keys(featuresResponse):[],hasFeatures:!!featuresResponse?.features,featuresIsArray:Array.isArray(featuresResponse?.features),featuresCount:featuresResponse?.features?.length||0,firstFeatureSample:featuresResponse?.features?.[0]?JSON.stringify(featuresResponse.features[0]).substring(0,300):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            
             console.log('[PLANES] Features response:', {
                 hasFeatures: !!featuresResponse?.features,
                 featuresCount: featuresResponse?.features?.length || 0,
@@ -355,7 +360,7 @@ router.get('/planes', async (req, res) => {
             if (featuresResponse && featuresResponse.features && Array.isArray(featuresResponse.features)) {
                 console.log(`[PLANES] Checking ${featuresResponse.features.length} features for planes`);
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:345',message:'PLANES checking features',data:{featuresCount:featuresResponse.features.length,firstFewFeatures:featuresResponse.features.slice(0,3).map(f=>({btType:f.btType,featureType:f.featureType,name:f.name,featureId:f.featureId}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:355',message:'PLANES checking features',data:{featuresCount:featuresResponse.features.length,allFeatureNames:featuresResponse.features.map(f=>f.message?.name||f.name||f.featureId||'unknown').slice(0,10),allFeatureTypes:featuresResponse.features.map(f=>({btType:f.btType,type:f.type,featureType:f.featureType})).slice(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
                 // #endregion
                 featuresResponse.features.forEach((feature, index) => {
                     // #region agent log
@@ -363,6 +368,8 @@ router.get('/planes', async (req, res) => {
                     // #endregion
                     // Check feature type - can be btType string ("BTMFeature-134" for planes), numeric type (134), or featureType string
                     const btType = feature.btType || '';
+                    // The actual feature type is nested in feature.message.featureType for BTM features
+                    const messageFeatureType = feature.message?.featureType || '';
                     const featureType = feature.featureType || feature.type || feature.typeName;
                     const featureTypeStr = typeof featureType === 'string' ? featureType : '';
                     const featureName = feature.message?.name || feature.name || feature.featureId;
@@ -371,22 +378,63 @@ router.get('/planes', async (req, res) => {
                     // Check if it's a plane feature
                     // BTMFeature-134 is the btType for plane features (string)
                     const isPlaneBtType = btType === 'BTMFeature-134' || btType.includes('Plane');
-                    // Also check numeric type (134 = BTMFeature-134)
-                    const isNumericPlaneType = feature.type === 134;
-                    // Also check featureType for plane-related types
+                    // Check if it's a BTMFeature (type 134) AND has a plane-related featureType in message
+                    // Type 134 alone is not enough - need to check message.featureType for actual plane types
+                    // From logs: features have feature.message.featureType = "cPlane", "newPlane", etc.
+                    const isNumericPlaneType = feature.type === 134 && (
+                        messageFeatureType === 'newPlane' || 
+                        messageFeatureType === 'cPlane' ||
+                        messageFeatureType === 'cPlanePoint' ||
+                        messageFeatureType === 'cPlane3Points' ||
+                        messageFeatureType === 'cPlaneMidpoint' ||
+                        messageFeatureType === 'datumPlane' ||
+                        planeTypes.some(pt => messageFeatureType.includes(pt))
+                    );
+                    // Also check featureType for plane-related types (fallback)
                     const isStringPlaneType = typeof featureTypeStr === 'string' && (featureTypeStr === 'newPlane' || planeTypes.some(pt => featureTypeStr.includes(pt)));
+                    // Name-based detection (for features with "plane" or "datum" in name)
                     const matchesPlaneName = featureName && (featureName.toLowerCase().includes('plane') || featureName.toLowerCase().includes('datum'));
                     
                     if ((isPlaneBtType || isNumericPlaneType || isStringPlaneType || matchesPlaneName) && featureId) {
-                        const detectionMethod = isNumericPlaneType ? 'numeric' : isPlaneBtType ? 'btType' : isStringPlaneType ? 'featureType' : 'name';
-                        console.log(`[PLANES] Found plane: ${featureName} (${featureId}) - btType: ${btType}, type: ${feature.type}, featureType: ${featureTypeStr}, method: ${detectionMethod}`);
+                        const detectionMethod = isNumericPlaneType ? 'numeric+messageFeatureType' : isPlaneBtType ? 'btType' : isStringPlaneType ? 'featureType' : 'name';
+                        
+                        // Extract deterministic ID from plane feature parameters
+                        // For plane features, we need to find the parameter that defines the plane itself
+                        // This is typically the first parameter that references a plane geometry
+                        let deterministicId = null;
+                        const parameters = feature.message?.parameters || [];
+                        const allGeometryIds = [];
+                        
+                        for (const param of parameters) {
+                            const paramId = param.message?.parameterId || '';
+                            if (param.message?.queries) {
+                                for (const query of param.message.queries) {
+                                    if (query.message?.geometryIds && query.message.geometryIds.length > 0) {
+                                        const ids = query.message.geometryIds;
+                                        allGeometryIds.push(...ids);
+                                        // For plane features, the plane's own ID is typically in the first parameter
+                                        // that has geometryIds (this is usually the plane definition parameter)
+                                        if (!deterministicId && ids.length > 0) {
+                                            deterministicId = ids[0];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:402',message:'Plane feature parameters analysis',data:{featureId,featureName,parametersCount:parameters.length,allGeometryIds,selectedDeterministicId:deterministicId,parameterDetails:parameters.map(p=>({paramId:p.message?.parameterId,hasQueries:!!p.message?.queries,geometryIds:p.message?.queries?.flatMap(q=>q.message?.geometryIds||[])||[]}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                        // #endregion
+                        
+                        console.log(`[PLANES] Found plane: ${featureName} (${featureId}) - deterministicId: ${deterministicId || 'not found'}, method: ${detectionMethod}`);
                         customPlanes.push({
                             id: featureId,
                             name: featureName || `Plane ${featureId}`,
-                            type: 'custom'
+                            type: 'custom',
+                            deterministicId: deterministicId // Store deterministic ID if found
                         });
                         // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:360',message:'Added custom plane',data:{planeId:featureId,planeName:featureName,btType,featureType:featureTypeStr,featureTypeNumeric:feature.type,detectionMethod},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                        fetch('http://127.0.0.1:7243/ingest/adf2d56b-ab7c-40dc-80c8-d55fefda3e64',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiRouter.js:410',message:'Added custom plane',data:{planeId:featureId,planeName:featureName,deterministicId,btType,messageFeatureType,featureType:featureTypeStr,featureTypeNumeric:feature.type,detectionMethod},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
                         // #endregion
                     }
                 });
